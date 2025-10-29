@@ -44,19 +44,20 @@ app = FastAPI(
 
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000'],
+  allow_origins=['*'],  # Allow all origins in Databricks Apps (served from same domain)
   allow_credentials=True,
   allow_methods=['*'],
   allow_headers=['*'],
 )
 
-app.include_router(router, prefix='/api', tags=['api'])
-
-
 @app.get('/health')
 async def health():
   """Health check endpoint."""
   return {'status': 'healthy'}
+
+
+# Include API routes BEFORE static files
+app.include_router(router, prefix='/api', tags=['api'])
 
 
 # ============================================================================
@@ -65,5 +66,29 @@ async def health():
 # This static file mount MUST be the last route registered!
 # It catches all unmatched requests and serves the React app.
 # Any routes added after this will be unreachable!
-if os.path.exists('client/build'):
-  app.mount('/', StaticFiles(directory='client/build', html=True), name='static')
+
+# Try multiple possible paths for the build directory
+build_paths = [
+  'client/build',
+  '/Workspace/Users/krishnendu.hazra@databricks.com/text2codeapp/client/build',
+  './client/build',
+]
+
+build_dir = None
+for path in build_paths:
+  if os.path.exists(path):
+    build_dir = path
+    break
+
+if build_dir:
+  try:
+    app.mount('/', StaticFiles(directory=build_dir, html=True), name='static')
+    print(f"✓ Static files mounted from: {build_dir}")
+  except Exception as e:
+    print(f"Warning: Could not mount static files from {build_dir}: {e}")
+else:
+  # Fallback: add a catch-all route that returns the frontend if no static dir found
+  @app.get('/{path:path}')
+  async def catch_all(path: str):
+    """Catch-all route for frontend."""
+    return {'error': f'Not found: {path}', 'status': 404}

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 
 from server.services.user_service import UserService
 
@@ -12,9 +13,9 @@ class UserInfo(BaseModel):
   """Databricks user information."""
 
   userName: str
-  displayName: str | None = None
+  displayName: Optional[str] = None
   active: bool
-  emails: list[str] = []
+  emails: list = []
 
 
 class UserWorkspaceInfo(BaseModel):

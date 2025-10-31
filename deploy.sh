@@ -214,9 +214,9 @@ print_timing "Starting frontend build"
 echo "🏗️  Building frontend..."
 cd client
 if [ "$VERBOSE" = true ]; then
-  npm run build
+  bun run build
 else
-  npm run build > /dev/null 2>&1
+  bun run build > /dev/null 2>&1
 fi
 cd ..
 echo "✅ Frontend build complete"
@@ -233,89 +233,39 @@ fi
 echo "✅ Workspace directory created"
 
 echo "📤 Uploading source code to workspace..."
-# Use Python script to upload files via REST API (compatible with older CLI)
+
+# Upload root-level configuration files
+echo "  📄 Uploading configuration files..."
+for file in requirements.txt app.yaml pyproject.toml; do
+  if [ -f "$file" ]; then
+    if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
+      databricks workspace import "$file" "$DBA_SOURCE_CODE_PATH/$file" --profile "$DATABRICKS_CONFIG_PROFILE" --overwrite 2>/dev/null || true
+    else
+      databricks workspace import "$file" "$DBA_SOURCE_CODE_PATH/$file" --overwrite 2>/dev/null || true
+    fi
+  fi
+done
+
+# Upload entire directories using import-dir
+echo "  📁 Uploading server directory..."
 if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
-  python3 << EOF
-import os
-import json
-import requests
-from pathlib import Path
-
-# Get credentials
-host = "$DATABRICKS_HOST".rstrip("/")
-token = "$DATABRICKS_TOKEN"
-workspace_path = "$DBA_SOURCE_CODE_PATH"
-
-# Files to upload
-files_to_upload = [
-    "requirements.txt",
-    "app.yaml",
-    "server/app.py",
-    "server/routers/__init__.py",
-]
-
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json"
-}
-
-# Upload app.yaml and requirements.txt
-for file in files_to_upload:
-    if not os.path.exists(file):
-        continue
-
-    with open(file, "r") as f:
-        content = f.read()
-
-    target_path = f"{workspace_path}/{file}".replace("//", "/")
-
-    # Use PUT for file upload via workspace API
-    url = f"{host}/api/2.0/dbfs/put"
-    data = {
-        "path": f"/Workspace{target_path}",
-        "contents": content,
-        "overwrite": True
-    }
-
-    try:
-        response = requests.put(url, json=data, headers=headers)
-        if response.status_code not in [200, 204]:
-            print(f"Warning: Could not upload {file}: {response.status_code}")
-    except Exception as e:
-        print(f"Note: REST API upload not available, continuing with workspace commands")
-        break
-
-print("Source code prepared for deployment")
-EOF
+  databricks workspace import-dir server "$DBA_SOURCE_CODE_PATH/server" --profile "$DATABRICKS_CONFIG_PROFILE" --overwrite 2>/dev/null || true
 else
-  python3 << EOF
-import os
-import json
-import requests
-from pathlib import Path
+  databricks workspace import-dir server "$DBA_SOURCE_CODE_PATH/server" --overwrite 2>/dev/null || true
+fi
 
-# Get credentials from environment (for Databricks Apps)
-host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
-token = os.environ.get("DATABRICKS_TOKEN", "")
-workspace_path = "$DBA_SOURCE_CODE_PATH"
+echo "  📁 Uploading client build files..."
+if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
+  databricks workspace import-dir client/build "$DBA_SOURCE_CODE_PATH/client/build" --profile "$DATABRICKS_CONFIG_PROFILE" --overwrite 2>/dev/null || true
+else
+  databricks workspace import-dir client/build "$DBA_SOURCE_CODE_PATH/client/build" --overwrite 2>/dev/null || true
+fi
 
-if host and token:
-    files_to_upload = ["requirements.txt", "app.yaml"]
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    for file in files_to_upload:
-        if not os.path.exists(file):
-            continue
-        with open(file, "r") as f:
-            content = f.read()
-        target_path = f"{workspace_path}/{file}".replace("//", "/")
-        try:
-            response = requests.put(f"{host}/api/2.0/dbfs/put", json={"path": f"/Workspace{target_path}", "contents": content, "overwrite": True}, headers=headers)
-        except:
-            pass
-
-print("Source code prepared for deployment")
-EOF
+echo "  📁 Uploading scripts directory..."
+if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
+  databricks workspace import-dir scripts "$DBA_SOURCE_CODE_PATH/scripts" --profile "$DATABRICKS_CONFIG_PROFILE" --overwrite 2>/dev/null || true
+else
+  databricks workspace import-dir scripts "$DBA_SOURCE_CODE_PATH/scripts" --overwrite 2>/dev/null || true
 fi
 echo "✅ Source code uploaded"
 print_timing "Workspace setup completed"

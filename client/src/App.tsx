@@ -1,11 +1,7 @@
-import { WelcomePage } from "./pages/WelcomePage";
+import { CodeGeneratorWizard } from "./pages/CodeGeneratorWizard";
 
 function App() {
-  return (
-    <div className="min-h-screen bg-background">
-      <WelcomePage />
-    </div>
-  );
+  return <CodeGeneratorWizard />;
 }
 
 export default App;
